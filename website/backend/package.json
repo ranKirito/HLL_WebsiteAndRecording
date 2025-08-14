@@ -1,0 +1,23 @@
+{
+  "scripts": {
+    "dev": "nodemon --watch './' --ext ts --exec 'tsx' index.ts"
+  },
+  "type": "module",
+  "dependencies": {
+    "better-sqlite3": "^12.1.1",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "multer": "^2.0.1",
+    "protobufjs": "^7.5.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/multer": "^1.4.13",
+    "@types/node": "^24.0.4",
+    "@types/protobufjs": "^6.0.0",
+    "nodemon": "^3.1.10",
+    "tsx": "^4.20.3"
+  }
+}
