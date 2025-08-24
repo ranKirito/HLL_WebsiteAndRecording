@@ -1,44 +1,21 @@
-// Lightweight, front-end friendly recorder that buffers gameplay events
-// and movement samples, then flushes them periodically to a caller-provided
-// handler (e.g., a Protobuf writer using protobufjs encodeDelimited).
-//
-// Usage example (outside):
-//   const rec = new Recorder({
-//     serverName: 'My Server',
-//     map: 'Foy Warfare',
-//     bounds: { minX: -5000, maxX: 5000, minY: -5000, maxY: 5000 },
-//     tickHz: 2,
-//     onFlush: (chunk) => writer.writeChunk(chunk),
-//   });
-//   rec.start();
-//   from hll-ircon events:
-//   rec.eventConnect({ id: steamId, side: 'Allies' });
-//   rec.eventKill({ killerId, victimId, weapon });
-//   movement sampling (call every second with current pos):
-//   rec.sampleMovement({ id: steamId, x, y, side: 'Allies', role: 'RIFLEMAN' });
-//   on match end:
-//   await rec.stop();
-
 export class Recorder {
-  constructor({ serverName, map, bounds, tickHz = 2, onFlush }) {
-    if (!serverName || !map || !bounds || !onFlush) {
+  constructor({ serverName, map, tickHz = 2, onFlush }) {
+    if (!serverName || !map || !onFlush) {
       throw new Error('Recorder requires { serverName, map, bounds, onFlush }');
     }
     this.serverName = serverName;
     this.map = map;
-    this.bounds = bounds; // { minX, maxX, minY, maxY }
     this.tickHz = tickHz;
-    this.onFlush = onFlush; // function (chunk) => void
-    this.MAXQ = 4095; // quantization grid
+    this.onFlush = onFlush;
 
-    // internal buffers
+
     this._currentChunk = this._newChunk();
     this._timer = null;
 
-    // movement de-dupe state
-    this._lastPos = new Map(); // playerId -> { x_q, y_q, t_ms }
+
+    this._lastPos = new Map();
     this._moveMinDtMs = 500;   // only record at least every 500ms per player
-    this._moveMinDeltaQ = 1;   // at least 1 quantized cell change
+    this._moveMinDeltaQ = 1;
   }
 
   // --- public getters ---
@@ -58,10 +35,9 @@ export class Recorder {
     this.flush();
   }
 
-  // --- event helpers ---
-  // Enums are strings here; translate to your numeric enums in the writer if needed.
-  eventConnect({ id, side }) {
-    this._pushEvent({ t_ms: Date.now(), player_id: id, type: 'CONNECT', side });
+
+  eventConnect({ id, side, role, team, loadout }) {
+    this._pushEvent({ t_ms: Date.now(), player_id: id, type: 'CONNECT', side, role, team, loadout });
   }
 
   eventDisconnect({ id }) {
@@ -88,7 +64,6 @@ export class Recorder {
     this._pushEvent({ t_ms: Date.now(), player_id: id, type: 'FACTION_SWITCH', previousSide, side });
   }
 
-  // Call this every second with the latest position.
   sampleMovement({ id, x, y }) {
     const t_ms = Date.now();
     const { x_q, y_q } = this._quantize(x, y);
@@ -99,9 +74,8 @@ export class Recorder {
       const dx = Math.abs(x_q - last.x_q);
       const dy = Math.abs(y_q - last.y_q);
       const movedEnough = dx >= this._moveMinDeltaQ || dy >= this._moveMinDeltaQ;
-      if (!movedEnough && dt < this._moveMinDtMs) return; // skip redundant sample
+      if (!movedEnough && dt < this._moveMinDtMs) return;
     }
-
     this._currentChunk.pos.push({ t_ms, player_id: id, x_q, y_q });
     this._lastPos.set(id, { x_q, y_q, t_ms });
   }
@@ -126,10 +100,6 @@ export class Recorder {
   }
 
   _quantize(x, y) {
-    const { minX, maxX, minY, maxY } = this.bounds;
-    const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-    const norm = (v, a, b) => (clamp(v, a, b) - a) / (b - a || 1);
-    const q = (r) => Math.round(r * this.MAXQ);
-    return { x_q: q(norm(x, minX, maxX)), y_q: q(norm(y, minY, maxY)) };
+    return { x_q: x, y_q: y };
   }
 }

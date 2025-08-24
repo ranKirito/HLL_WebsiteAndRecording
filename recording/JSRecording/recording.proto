@@ -9,7 +9,7 @@ enum Role   {
   MACHINE_GUNNER = 4;
   ENGINEER = 5;
   CREWMAN = 6;
-  AUTOMATIC_RIFELMAN = 7;
+  AUTOMATIC_RIFLEMAN = 7;
   ASSAULT = 8;
   ANTI_TANK = 9;
   RIFLEMAN = 10;
@@ -18,14 +18,8 @@ enum Role   {
   SUPPORT = 13;
   TANK_COMMANDER = 14;
 }
-// TODO: add teams
-enum Team {
-  MIKE = 1;
-}
-// TODO: add loadouts
-enum Loadouts {
 
-}
+
 
 enum EventType {
   EVT_UNSPEC = 0;
@@ -39,8 +33,6 @@ message MatchHeader {
   string map_name = 2;
   int64  start_ms = 3;
   int32  tick_hz  = 4;
-  float  min_x = 5; float max_x = 6;
-  float  min_y = 7; float max_y = 8;
 }
 
 message Event {
@@ -51,10 +43,10 @@ message Event {
   Side       side = 5;
   Role       previousRole = 6;
   Role       role = 7;
-  Team       previousTeam = 8;
-  Team       team = 9;
-  Loadouts   previousLoadout = 10;
-  Loadouts   loadout = 11;
+  string     previousTeam = 8;
+  string     team = 9;
+  string   previousLoadout = 10;
+  string   loadout = 11;
   string     target_id = 12;  // victim for KILL
   string     weapon = 13;     // optional
 }
