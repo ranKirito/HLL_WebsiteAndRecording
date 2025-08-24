@@ -2,19 +2,20 @@ import { IRCONClient } from 'hll-ircon';
 import { Recorder } from './recorder.js';
 import { TelemetryWriter } from './writer.js';
 
-// --- helpers to map library values to recorder-friendly enums/strings ---
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+
 const sideFromFactionString = (s) => {
   if (s === 'Allies') return 'ALLIES';
   if (s === 'Axis') return 'AXIS';
-  return 'SIDE_UNKNOWN'; // 'None' or anything else
+  return 'SIDE_UNKNOWN';
 };
-// TODO: map numeric role -> enum string you use in your .proto (placeholder for now)
-const roleToEnum = (n) => 'ROLE_UNKNOWN';
-// TODO: check if playerIDs corelate to steamUIDS
+const roleToEnum = (n) => (n === 9 ? "OFFICER" : n === 7 ? "ANTI_TANK" : n === 5 ? "SUPPORT" : n === 8 ? "ENGINEER" : n === 1 ? "ASSAULT" : n === 0 ? "RIFLEMAN" : n === 3 ? "MEDIC" : n === 13 ? "COMMANDER" : n === 4 ? "SPOTTER" : n === 12 ? "TANK_COMMANDER" : 'ROLE_UNKNOWN');
 
-const teamToSide = (t) => (t === 1 ? 'ALLIES' : t === 0 ? 'AXIS' : 'SIDE_UNKNOWN');
+const teamToSide = (t) => (t === 2 ? 'ALLIES' : t === 0 ? 'AXIS' : 'SIDE_UNKNOWN');
 
-// Extract a printable server name regardless of object/string shape
 const printableServerName = (serverName) => {
   if (serverName && typeof serverName === 'object') {
     return serverName.Value || serverName.name || JSON.stringify(serverName);
@@ -22,10 +23,15 @@ const printableServerName = (serverName) => {
   return serverName;
 };
 
-// Seed initial roster into the recorder (synthetic CONNECT + initial position)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const OUT_DIR = path.resolve(__dirname, '../out');
+fs.mkdirSync(OUT_DIR, { recursive: true });
+
 async function seedInitialState(rec, roster) {
   for (const p of roster) {
-    rec.eventConnect({ id: p.iD, side: teamToSide(p.team), role: roleToEnum(p.role) });
+    rec.eventConnect({ id: p.iD, side: teamToSide(p.team), role: roleToEnum(p.role), team: p.platoon, loadout: p.loadout });
     if (p.worldPosition) {
       rec.sampleMovement({
         id: p.iD,
@@ -34,7 +40,7 @@ async function seedInitialState(rec, roster) {
       });
     }
   }
-  rec.flush(); // write an initial chunk immediately
+  rec.flush();
 }
 
 const client = new IRCONClient({
@@ -44,39 +50,41 @@ const client = new IRCONClient({
 });
 
 client.on('ready', async () => {
-  // --- server + session info ---
   const serverNameRaw = await client.v2.server.getServerName();
   const serverName = printableServerName(serverNameRaw);
   console.log('Logged in to server:', serverName);
 
   const sessionInfo = await client.v2.session.getSession();
-  console.log('Session information:', sessionInfo);
+  console.log(`Session started: map=${sessionInfo?.session?.mapName}, players=${sessionInfo?.session?.playerCount ?? 0}`);
 
-  // --- open protobuf writer & header ---
+  const outFile = path.join(
+    OUT_DIR,
+    `match_${new Date().toISOString().replace(/[:.]/g, '-')}.hll`
+  );
+
   const writer = new TelemetryWriter({
-    schemaPath: './recording.proto',
-    // place outputs one directory up from JSRecording into ./out/
-    outFile: `../out/match_${new Date().toISOString().replace(/[:.]/g, '-')}.pb`,
+
+    schemaPath: path.resolve(__dirname, 'recording.proto'),
+    outFile,
   });
-  await writer.init({
-    match_id: new Date().toISOString().replace(/[:.]/g, '-'),
-    map_name: sessionInfo?.session?.mapName ?? 'Unknown',
-    start_ms: Date.now(),
-    tick_hz: 2,
-    // TODO: replace these with real map bounds
-    min_x: -5000,
-    max_x: 5000,
-    min_y: -5000,
-    max_y: 5000,
-  });
+  console.log('Telemetry file will be written to:', outFile);
+  try {
+    await writer.init({
+      match_id: new Date().toISOString().replace(/[:.]/g, '-'),
+      map_name: sessionInfo?.session?.mapName ?? 'Unknown',
+      start_ms: Date.now(),
+      tick_hz: 2,
+    });
+  } catch (err) {
+    console.error('Failed to initialize TelemetryWriter:', err);
+    throw err;
+  }
 
   // --- initial players snapshot ---
-  const playersPlaying = await client.v2.players.fetch(); // array of Player objects
-  console.log('Players currently playing:', playersPlaying.length);
+  const initialPlayersResp = await client.v2.players.fetch();
+  const playersPlaying = initialPlayersResp?.players ?? [];
+  let previousPlayersInfo = playersPlaying.slice();
 
-  let previousPlayersInfo = await client.v2.players.fetch();
-  // --- initialize recorder (provide map bounds + flush handler) ---
-  // TODO: replace bounds with actual map extent if you have it
   const recorder = new Recorder({
     serverName,
     map: sessionInfo.session.mapName,
@@ -87,15 +95,15 @@ client.on('ready', async () => {
     },
   });
 
-  // Seed initial roster so mid-match players appear immediately
   await seedInitialState(recorder, playersPlaying);
   recorder.start();
 
-  // --- movement sampler: poll positions every second and record if changed ---
   const movementTimer = setInterval(async () => {
     try {
-      const cur = await client.v2.players.fetch();
-      const prevById = new Map(previousPlayersInfo.map(pp => [pp.iD, pp]));
+      const curResp = await client.v2.players.fetch();
+      const cur = curResp?.players ?? [];
+      const prevList = Array.isArray(previousPlayersInfo) ? previousPlayersInfo : [];
+      const prevById = new Map(prevList.map(pp => [pp.iD, pp]));
       for (const p of cur) {
         if (!p.worldPosition) continue;
         recorder.sampleMovement({
@@ -103,24 +111,26 @@ client.on('ready', async () => {
           x: p.worldPosition.x,
           y: p.worldPosition.y,
         });
-        // not available in the parser of the client so this is the easiest way to do it
         const prev = prevById.get(p.iD);
         if (prev) {
-          if (p.team !== prev.team) {
+          if (p.platoon !== prev.platoon) {
+            console.log(`TEAM SWITCH: Player ${p.iD} from team ${prev.platoon} -> ${p.platoon}`);
             recorder.eventTeamSwitch({
               id: p.iD,
-              previousTeam: prev.team,
-              team: p.team,
+              previousTeam: prev.platoon,
+              team: p.platoon,
             });
           }
           if (p.role !== prev.role) {
+            console.log(`ROLE SWITCH: Player ${p.iD} from ${roleToEnum(prev.role)} -> ${roleToEnum(p.role)}`);
             recorder.eventRoleSwitch({
               id: p.iD,
-              previousRole: prev.role,
-              role: p.role,
+              previousRole: roleToEnum(prev.role),
+              role: roleToEnum(p.role),
             });
           }
           if (p.loadout !== prev.loadout) {
+            console.log(`LOADOUT SWITCH: Player ${p.iD} from ${prev.loadout} -> ${p.loadout}`);
             recorder.eventLoadoutSwitch({
               id: p.iD,
               previousLoadout: prev.loadout,
@@ -129,7 +139,6 @@ client.on('ready', async () => {
           }
         }
       }
-      //refresh prev players
 
       previousPlayersInfo = cur;
     } catch (e) {
@@ -137,23 +146,26 @@ client.on('ready', async () => {
     }
   }, 1000);
 
-  // --- example event hooks (adjust to actual event names/payloads emitted by the lib) ---
   client.on('playerConnected', async (evt) => {
-    // If the event only has an ID, fetch the player object; otherwise map directly
     const p = evt?.player || (await client.v2.players.get?.(evt?.parsed?.playerId));
     if (!p) return;
-    recorder.eventConnect({ id: p.iD, side: teamToSide(p.team), role: roleToEnum(p.role) });
+    console.log(`CONNECT: Player ${p.iD} joined as ${roleToEnum(p.role)} on ${teamToSide(p.team)}`);
+    recorder.eventConnect({ id: p.iD, side: teamToSide(p.team), role: roleToEnum(p.role), team: p.platoon, loadout: p.loadout });
   });
 
   client.on('playerDisconnected', (evt) => {
     const id = evt?.parsed?.playerId || evt?.player?.iD;
-    if (id) recorder.eventDisconnect({ id });
+    if (id) {
+      console.log(`DISCONNECT: Player ${id} left the server`);
+      recorder.eventDisconnect({ id });
+    }
   });
 
   client.on('playerSwitchFaction', (evt) => {
     const id = evt?.parsed?.playerId || evt?.player?.iD;
     const prev = sideFromFactionString(evt?.parsed?.oldFaction);
     const next = sideFromFactionString(evt?.parsed?.newFaction);
+    console.log(`FACTION SWITCH: Player ${id} ${prev} -> ${next}`);
     if (id && prev !== next) {
       if (!(prev === 'SIDE_UNKNOWN' && next === 'SIDE_UNKNOWN')) {
         recorder.eventFactionSwitch({ id, previousSide: prev, side: next });
@@ -166,6 +178,7 @@ client.on('ready', async () => {
     const killerId = evt?.parsed?.killerId;
     const victimId = evt?.parsed?.victimId;
     const weapon = evt?.parsed?.weapon;
+    console.log(`KILL: Killer=${killerId}, Victim=${victimId}, Weapon=${weapon}`);
     if (killerId && victimId) {
       recorder.eventKill({ killerId, victimId, weapon });
     }
@@ -175,6 +188,7 @@ client.on('ready', async () => {
     const killerId = evt?.parsed?.killerId;
     const victimId = evt?.parsed?.victimId;
     const weapon = evt?.parsed?.weapon;
+    console.log(`TEAM KILL: Killer=${killerId}, Victim=${victimId}, Weapon=${weapon}`);
     if (killerId && victimId) {
       recorder.eventKill({ killerId, victimId, weapon });
     }
@@ -182,6 +196,7 @@ client.on('ready', async () => {
 
   // --- graceful shutdown ---
   const shutdown = async () => {
+    console.log('Shuting down...')
     clearInterval(movementTimer);
     await recorder.stop();
     writer.close();
@@ -194,4 +209,11 @@ client.on('ready', async () => {
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+
+  process.on('unhandledRejection', (reason) => {
+    console.error('Unhandled promise rejection:', reason);
+  });
+  process.on('uncaughtException', (err) => {
+    console.error('Uncaught exception:', err);
+  });
 });

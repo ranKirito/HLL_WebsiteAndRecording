@@ -1,6 +1,7 @@
 {
   "dependencies": {
-    "hll-ircon": "^1.2.3"
+    "hll-ircon": "^1.2.3",
+    "protobufjs": "^7.5.4"
   },
   "name": "recording",
   "version": "1.0.0",
