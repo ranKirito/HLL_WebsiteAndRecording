@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "dotenv": "^17.2.1",
     "hll-ircon": "^1.2.3",
     "protobufjs": "^7.5.4"
   },
