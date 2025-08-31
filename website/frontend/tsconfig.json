@@ -1,0 +1,28 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.app.json"
+    },
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ],
+
+  "compilerOptions": {
+    "target": "ES2020",                // Good balance between features and compatibility
+    "module": "ESNext",                // Required for ESM
+    "moduleResolution": "node",       // Resolves imports like Node
+    "esModuleInterop": true,          // Lets you import CommonJS modules like 'express'
+    "strict": true,                   // Recommended: catches more bugs
+    "skipLibCheck": true,             // Optional: faster build, ignore type issues in node_modules
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "dist",                 // Output dir if you ever compile (not used with ts-node)
+    "baseUrl": ".",                   // For path aliases (optional)
+    "paths": {
+      "@/*": ["./src/*"]              // Optional: for frontend aliases
+    }
+  },
+  "include": ["./backend/**/*", "./frontend/**/*"]
+}
+

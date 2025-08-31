@@ -1,0 +1,65 @@
+syntax = "proto3";
+package hll.telemetry;
+
+enum Side   { SIDE_UNKNOWN = 0; AXIS = 1; ALLIES = 2; }
+enum Role   {
+  ROLE_UNKNOWN = 0;
+  COMMANDER = 1;
+  OFFICER = 2; MEDIC = 3;
+  MACHINE_GUNNER = 4;
+  ENGINEER = 5;
+  CREWMAN = 6;
+  AUTOMATIC_RIFLEMAN = 7;
+  ASSAULT = 8;
+  ANTI_TANK = 9;
+  RIFLEMAN = 10;
+  SNIPER = 11;
+  SPOTTER = 12;
+  SUPPORT = 13;
+  TANK_COMMANDER = 14;
+}
+
+
+
+enum EventType {
+  EVT_UNSPEC = 0;
+  CONNECT = 1; DISCONNECT = 2; KILL = 3;
+  TEAM_SWITCH = 4; ROLE_SWITCH = 5; FACTION_SWITCH = 6;
+  LOADOUT_SWITCH = 7;
+}
+
+message MatchHeader {
+  string match_id = 1;
+  string map_name = 2;
+  int64  start_ms = 3;
+  int32  tick_hz  = 4;
+}
+
+message Event {
+  int64      t_ms = 1;
+  string     player_id = 2;
+  EventType  type = 3;
+  Side       previousSide = 4;
+  Side       side = 5;
+  Role       previousRole = 6;
+  Role       role = 7;
+  string     previousTeam = 8;
+  string     team = 9;
+  string   previousLoadout = 10;
+  string   loadout = 11;
+  string     target_id = 12;  // victim for KILL
+  string     weapon = 13;     // optional
+}
+
+message PositionSample {
+  int64  t_ms = 1;
+  string player_id = 2;
+  uint32 x_q = 3;  // quantized x (e.g., 0..4095)
+  uint32 y_q = 4;  // quantized y
+}
+
+message Chunk {
+  int64 start_ms = 1;
+  repeated Event events = 2;
+  repeated PositionSample pos = 3;
+}

@@ -1,0 +1,458 @@
+{
+  "header": {
+    "matchId": "2025-08-24T11-45-37-100Z",
+    "mapName": "STALINGRAD",
+    "startMs": "1756035937100",
+    "tickHz": 2
+  },
+  "chunks": [
+    {
+      "events": [
+        {
+          "tMs": "1756035937150",
+          "playerId": "76561199077051244",
+          "type": "CONNECT",
+          "previousSide": "SIDE_UNKNOWN",
+          "side": "ALLIES",
+          "previousRole": "ROLE_UNKNOWN",
+          "role": "TANK_COMMANDER",
+          "previousTeam": "",
+          "team": "ABLE",
+          "previousLoadout": "",
+          "loadout": "Standard Issue",
+          "targetId": "",
+          "weapon": ""
+        }
+      ],
+      "pos": [
+        {
+          "tMs": "1756035937150",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035937150"
+    },
+    {
+      "events": [],
+      "pos": [
+        {
+          "tMs": "1756035938196",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035937153"
+    },
+    {
+      "events": [],
+      "pos": [
+        {
+          "tMs": "1756035939206",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035938658"
+    },
+    {
+      "events": [],
+      "pos": [
+        {
+          "tMs": "1756035940247",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035939659"
+    },
+    {
+      "events": [],
+      "pos": [
+        {
+          "tMs": "1756035941261",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035940663"
+    },
+    {
+      "events": [],
+      "pos": [
+        {
+          "tMs": "1756035942197",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035941664"
+    },
+    {
+      "events": [
+        {
+          "tMs": "1756035943198",
+          "playerId": "76561199077051244",
+          "type": "TEAM_SWITCH",
+          "previousSide": "SIDE_UNKNOWN",
+          "side": "SIDE_UNKNOWN",
+          "previousRole": "ROLE_UNKNOWN",
+          "role": "ROLE_UNKNOWN",
+          "previousTeam": "ABLE",
+          "team": "",
+          "previousLoadout": "",
+          "loadout": "",
+          "targetId": "",
+          "weapon": ""
+        },
+        {
+          "tMs": "1756035943199",
+          "playerId": "76561199077051244",
+          "type": "ROLE_SWITCH",
+          "previousSide": "SIDE_UNKNOWN",
+          "side": "SIDE_UNKNOWN",
+          "previousRole": "TANK_COMMANDER",
+          "role": "RIFLEMAN",
+          "previousTeam": "",
+          "team": "",
+          "previousLoadout": "",
+          "loadout": "",
+          "targetId": "",
+          "weapon": ""
+        }
+      ],
+      "pos": [
+        {
+          "tMs": "1756035943198",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035942664"
+    },
+    {
+      "events": [],
+      "pos": [
+        {
+          "tMs": "1756035944247",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035943665"
+    },
+    {
+      "events": [],
+      "pos": [
+        {
+          "tMs": "1756035945247",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035944666"
+    },
+    {
+      "events": [
+        {
+          "tMs": "1756035946249",
+          "playerId": "76561199077051244",
+          "type": "TEAM_SWITCH",
+          "previousSide": "SIDE_UNKNOWN",
+          "side": "SIDE_UNKNOWN",
+          "previousRole": "ROLE_UNKNOWN",
+          "role": "ROLE_UNKNOWN",
+          "previousTeam": "",
+          "team": "ABLE",
+          "previousLoadout": "",
+          "loadout": "",
+          "targetId": "",
+          "weapon": ""
+        },
+        {
+          "tMs": "1756035946249",
+          "playerId": "76561199077051244",
+          "type": "ROLE_SWITCH",
+          "previousSide": "SIDE_UNKNOWN",
+          "side": "SIDE_UNKNOWN",
+          "previousRole": "RIFLEMAN",
+          "role": "OFFICER",
+          "previousTeam": "",
+          "team": "",
+          "previousLoadout": "",
+          "loadout": "",
+          "targetId": "",
+          "weapon": ""
+        }
+      ],
+      "pos": [
+        {
+          "tMs": "1756035946249",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035945668"
+    },
+    {
+      "events": [],
+      "pos": [
+        {
+          "tMs": "1756035947268",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035946670"
+    },
+    {
+      "events": [
+        {
+          "tMs": "1756035948249",
+          "playerId": "76561199077051244",
+          "type": "TEAM_SWITCH",
+          "previousSide": "SIDE_UNKNOWN",
+          "side": "SIDE_UNKNOWN",
+          "previousRole": "ROLE_UNKNOWN",
+          "role": "ROLE_UNKNOWN",
+          "previousTeam": "ABLE",
+          "team": "",
+          "previousLoadout": "",
+          "loadout": "",
+          "targetId": "",
+          "weapon": ""
+        },
+        {
+          "tMs": "1756035948249",
+          "playerId": "76561199077051244",
+          "type": "ROLE_SWITCH",
+          "previousSide": "SIDE_UNKNOWN",
+          "side": "SIDE_UNKNOWN",
+          "previousRole": "OFFICER",
+          "role": "RIFLEMAN",
+          "previousTeam": "",
+          "team": "",
+          "previousLoadout": "",
+          "loadout": "",
+          "targetId": "",
+          "weapon": ""
+        }
+      ],
+      "pos": [
+        {
+          "tMs": "1756035948249",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035947672"
+    },
+    {
+      "events": [
+        {
+          "tMs": "1756035949250",
+          "playerId": "76561199077051244",
+          "type": "ROLE_SWITCH",
+          "previousSide": "SIDE_UNKNOWN",
+          "side": "SIDE_UNKNOWN",
+          "previousRole": "RIFLEMAN",
+          "role": "COMMANDER",
+          "previousTeam": "",
+          "team": "",
+          "previousLoadout": "",
+          "loadout": "",
+          "targetId": "",
+          "weapon": ""
+        }
+      ],
+      "pos": [
+        {
+          "tMs": "1756035949250",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035948675"
+    },
+    {
+      "events": [],
+      "pos": [
+        {
+          "tMs": "1756035950257",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035949677"
+    },
+    {
+      "events": [
+        {
+          "tMs": "1756035951283",
+          "playerId": "76561199077051244",
+          "type": "ROLE_SWITCH",
+          "previousSide": "SIDE_UNKNOWN",
+          "side": "SIDE_UNKNOWN",
+          "previousRole": "COMMANDER",
+          "role": "RIFLEMAN",
+          "previousTeam": "",
+          "team": "",
+          "previousLoadout": "",
+          "loadout": "",
+          "targetId": "",
+          "weapon": ""
+        }
+      ],
+      "pos": [
+        {
+          "tMs": "1756035951283",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035950678"
+    },
+    {
+      "events": [],
+      "pos": [
+        {
+          "tMs": "1756035952266",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035951682"
+    },
+    {
+      "events": [],
+      "pos": [
+        {
+          "tMs": "1756035953249",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035952683"
+    },
+    {
+      "events": [],
+      "pos": [
+        {
+          "tMs": "1756035954248",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035953684"
+    },
+    {
+      "events": [],
+      "pos": [
+        {
+          "tMs": "1756035955251",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035954686"
+    },
+    {
+      "events": [
+        {
+          "tMs": "1756035956249",
+          "playerId": "76561199077051244",
+          "type": "TEAM_SWITCH",
+          "previousSide": "SIDE_UNKNOWN",
+          "side": "SIDE_UNKNOWN",
+          "previousRole": "ROLE_UNKNOWN",
+          "role": "ROLE_UNKNOWN",
+          "previousTeam": "",
+          "team": "ABLE",
+          "previousLoadout": "",
+          "loadout": "",
+          "targetId": "",
+          "weapon": ""
+        },
+        {
+          "tMs": "1756035956249",
+          "playerId": "76561199077051244",
+          "type": "ROLE_SWITCH",
+          "previousSide": "SIDE_UNKNOWN",
+          "side": "SIDE_UNKNOWN",
+          "previousRole": "RIFLEMAN",
+          "role": "SPOTTER",
+          "previousTeam": "",
+          "team": "",
+          "previousLoadout": "",
+          "loadout": "",
+          "targetId": "",
+          "weapon": ""
+        }
+      ],
+      "pos": [
+        {
+          "tMs": "1756035956249",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035955688"
+    },
+    {
+      "events": [],
+      "pos": [
+        {
+          "tMs": "1756035957249",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035956691"
+    },
+    {
+      "events": [],
+      "pos": [
+        {
+          "tMs": "1756035958250",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035957691"
+    },
+    {
+      "events": [],
+      "pos": [
+        {
+          "tMs": "1756035959251",
+          "playerId": "76561199077051244",
+          "xQ": 0,
+          "yQ": 0
+        }
+      ],
+      "startMs": "1756035958693"
+    }
+  ]
+}
