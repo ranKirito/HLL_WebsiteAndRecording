@@ -2,6 +2,7 @@
 import protobuf from 'protobufjs';
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 function toCSV(rows, headers) {
   const esc = (v) => {
@@ -21,7 +22,7 @@ async function writeFileIf(pathname, content) {
 
 export class TelemetryReader {
   constructor(opts = {}) {
-    const here = path.dirname(new URL(import.meta.url).pathname);
+    const here = path.dirname(fileURLToPath(import.meta.url));
     this.protoPath = opts.protoPath || path.resolve(here, 'recording.proto');
     this.root = null;
     this.MatchHeader = null;
@@ -143,24 +144,35 @@ export async function readChunksFromFile(filePath) {
   return { header, chunks, flat: rr.flatten(chunks) };
 }
 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   (async () => {
     try {
       const args = process.argv.slice(2);
       if (args.length === 0) {
-        console.error('Usage: node reader.js <file> [--out decoded.json] [--pos-csv pos.csv] [--events-csv events.csv]');
+        console.error('Usage: node reader.js <file> [--out|-out|-o decoded.json] [--pos-csv|-pos pos.csv] [--events-csv|-events events.csv] [--proto path/to/recording.proto]');
         process.exit(1);
       }
       const filePath = args[0];
-      const getFlag = (name) => {
-        const i = args.indexOf(name);
-        return i !== -1 && args[i + 1] ? args[i + 1] : null;
+      const getFlag = (...names) => {
+        for (const name of names) {
+          const i = args.indexOf(name);
+          if (i !== -1 && args[i + 1] && !args[i + 1].startsWith('-')) return args[i + 1];
+        }
+        return null;
       };
-      const outJson = getFlag('--out');
-      const posCsv = getFlag('--pos-csv');
-      const eventsCsv = getFlag('--events-csv');
+      const outJson = getFlag('--out', '-out', '-o');
+      const posCsv = getFlag('--pos-csv', '-pos');
+      const eventsCsv = getFlag('--events-csv', '-events');
+      const protoOverride = getFlag('--proto', '-proto');
 
-      const { header, chunks, flat } = await readChunksFromFile(filePath);
+      // Allow overriding the .proto file path from CLI
+      const rr = new TelemetryReader(protoOverride ? { protoPath: path.resolve(protoOverride) } : undefined);
+      const buf = await fsp.readFile(filePath);
+      await rr.init();
+      const decoded = rr.decodeBuffer(buf);
+      const header = decoded.header;
+      const chunks = decoded.chunks;
+      const flat = rr.flatten(chunks);
 
       console.log('Header:', JSON.stringify(header, null, 2));
       console.log('Decoded chunks:', JSON.stringify(chunks, null, 2));
