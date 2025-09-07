@@ -7,7 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from "dotenv";
 dotenv.config();
-import readline from 'readline/promises';
+import readline from 'node:readline';
 import { stdin as input, stdout as output } from 'process';
 
 const sideFromFactionString = (s) => {
@@ -45,9 +45,10 @@ async function loadOrAskConfig() {
   }
 
   const rl = readline.createInterface({ input, output });
+  const ask = (q) => new Promise((resolve) => rl.question(q, (ans) => resolve(ans)));
   try {
     if (saved && saved.host && saved.port && saved.password) {
-      const ans = (await rl.question(`Use saved server ("${saved.host}:${saved.port}")? [Y/n] `)).trim().toLowerCase();
+      const ans = (await ask(`Use saved server ("${saved.host}:${saved.port}")? [Y/n] `)).trim().toLowerCase();
       if (ans === '' || ans === 'y' || ans === 'yes') {
         await rl.close();
         return saved;
@@ -56,14 +57,13 @@ async function loadOrAskConfig() {
       console.log('No saved server info detected. Please enter your server info: ')
     }
 
-
-    const host = (await rl.question(`Enter Host Ip (e.g. 127.0.0.1): `)).trim();
-    const portStr = (await rl.question(`Enter Port Number (e.g. 8080): `)).trim();
-    const password = (await rl.question(`Enter RCON password: `)).trim();
+    const host = (await ask(`Enter Host Ip (e.g. 127.0.0.1): `)).trim();
+    const portStr = (await ask(`Enter Port Number (e.g. 8080): `)).trim();
+    const password = (await ask(`Enter RCON password: `)).trim();
 
     const cfg = { host, port: Number(portStr), password };
 
-    const saveAns = (await rl.question('Save these settings to server-config.json for next time? [y/N] ')).trim().toLowerCase();
+    const saveAns = (await ask('Save these settings to server-config.json for next time? [y/N] ')).trim().toLowerCase();
     if (saveAns === 'y' || saveAns === 'yes') {
       fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2));
       console.log('Saved to', CONFIG_PATH);
