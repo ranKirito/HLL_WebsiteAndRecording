@@ -103,30 +103,27 @@ async function seedInitialState(rec, roster) {
     const serverNameRaw = await client.v2.server.getServerName();
     const serverName = printableServerName(serverNameRaw);
     console.log('Logged in to server:', serverName);
-    const startTime = Date.now();
-    const sessionInfo = await client.v2.session.getSession();
+    let startTime = Date.now();
+    let sessionInfo = await client.v2.session.getSession();
     console.log(`Session started: map=${sessionInfo?.session?.mapName}, players=${sessionInfo?.session?.playerCount ?? 0}`);
     console.log(`Important: ${sessionInfo.session.gameMode}`)
-    const outFile = path.join(
-      OUT_DIR,
-      `match_${new Date().toISOString().replace(/[:.]/g, '-')}.hll`
-    );
-
-    console.log('Telemetry file will be written on shutdown to:', outFile);
+    const newOutPath = () => path.join(OUT_DIR, `match_${new Date().toISOString().replace(/[:.]/g, '-')}.hll`);
+    let outFile = newOutPath();
+    console.log('Telemetry file will be written on match end to:', outFile);
 
     // --- initial players snapshot ---
-    const initialPlayersResp = await client.v2.players.fetch();
-    const playersPlaying = initialPlayersResp?.players ?? [];
-    let previousPlayersInfo = playersPlaying.slice();
+    let previousPlayersInfo = [];
+    let recorder = new Recorder({ serverName, map: sessionInfo.session.mapName, tickHz: 2 });
 
-    const recorder = new Recorder({
-      serverName,
-      map: sessionInfo.session.mapName,
-      tickHz: 2,
-    });
+    async function startRecordingForCurrentSession() {
+      const initialPlayersResp = await client.v2.players.fetch();
+      const playersPlaying = initialPlayersResp?.players ?? [];
+      previousPlayersInfo = playersPlaying.slice();
+      await seedInitialState(recorder, playersPlaying);
+      recorder.start();
+    }
 
-    await seedInitialState(recorder, playersPlaying);
-    recorder.start();
+    await startRecordingForCurrentSession();
 
     const movementTimer = setInterval(async () => {
       try {
@@ -213,10 +210,7 @@ async function seedInitialState(rec, roster) {
     });
 
     // --- graceful shutdown ---
-    const shutdown = async () => {
-      console.log('Shuting down...')
-      clearInterval(movementTimer);
-      await recorder.stop();
+    async function finalizeToDisk() {
       try {
         const header = recorder.buildHeader({
           matchId: new Date().toISOString().replace(/[:.]/g, '-'),
@@ -230,9 +224,31 @@ async function seedInitialState(rec, roster) {
           header,
           chunks: recorder.getChunks(),
         });
+        console.log('Wrote telemetry:', outFile);
       } catch (err) {
         console.error('Failed to write telemetry file:', err);
       }
+    }
+
+    const finalizeAndRestart = async () => {
+      console.log('Match ended. Finalizing and restarting recorder...');
+      clearInterval(movementTimer);
+      await recorder.stop();
+      await finalizeToDisk();
+      // Refresh session, rotate file, reset state
+      startTime = Date.now();
+      sessionInfo = await client.v2.session.getSession();
+      outFile = newOutPath();
+      recorder = new Recorder({ serverName, map: sessionInfo.session.mapName, tickHz: 2 });
+      await startRecordingForCurrentSession();
+      // resume movement polling loop automatically below (it will continue using updated 'recorder')
+    };
+
+    const shutdown = async () => {
+      console.log('Shuting down...')
+      clearInterval(movementTimer);
+      await recorder.stop();
+      await finalizeToDisk();
       //store logs
       const elapsedMs = Date.now() - startTime;
       const logs = await client.v2.logs.fetch(elapsedMs);
@@ -246,9 +262,9 @@ async function seedInitialState(rec, roster) {
     };
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
-    client.on?.('MATCH ENDED', shutdown);
-    client.on?.('matchEnded', shutdown);
-    client.on?.('match_end', shutdown);
+    client.on?.('MATCH ENDED', finalizeAndRestart);
+    client.on?.('matchEnded', finalizeAndRestart);
+    client.on?.('match_end', finalizeAndRestart);
 
     process.on('unhandledRejection', (reason) => {
       console.error('Unhandled promise rejection:', reason);
