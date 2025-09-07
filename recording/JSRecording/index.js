@@ -78,6 +78,7 @@ async function loadOrAskConfig() {
 
 async function seedInitialState(rec, roster) {
   for (const p of roster) {
+    console.log(p.name, p.team)
     rec.eventConnect({ id: p.iD, name: p.name, side: teamToSide(p.team), role: roleToEnum(p.role), team: p.platoon, loadout: p.loadout, initial: true });
     if (p.worldPosition) {
       rec.sampleMovement({
@@ -114,6 +115,7 @@ async function seedInitialState(rec, roster) {
     // --- initial players snapshot ---
     let previousPlayersInfo = [];
     let recorder = new Recorder({ serverName, map: sessionInfo.session.mapName, tickHz: 2 });
+    const nameToId = new Map(); // playerName -> playerId
 
     const logsFileFor = (outfilePath) => {
       if (!outfilePath) return path.join(OUT_DIR, `match_${new Date().toISOString().replace(/[:.]/g, '-')}.logs.txt`);
@@ -125,6 +127,9 @@ async function seedInitialState(rec, roster) {
       const initialPlayersResp = await client.v2.players.fetch();
       const playersPlaying = initialPlayersResp?.players ?? [];
       previousPlayersInfo = playersPlaying.slice();
+      for (const p of playersPlaying) {
+        if (p?.name && p?.iD) nameToId.set(p.name, p.iD);
+      }
       await seedInitialState(recorder, playersPlaying);
       recorder.start();
     }
@@ -138,6 +143,7 @@ async function seedInitialState(rec, roster) {
         const prevList = Array.isArray(previousPlayersInfo) ? previousPlayersInfo : [];
         const prevById = new Map(prevList.map(pp => [pp.iD, pp]));
         for (const p of cur) {
+          if (p?.name && p?.iD) nameToId.set(p.name, p.iD);
           if (!p.worldPosition) continue;
           recorder.sampleMovement({
             id: p.iD,
@@ -171,6 +177,7 @@ async function seedInitialState(rec, roster) {
       const p = evt?.player || (await client.v2.players.get?.(evt?.parsed?.playerId));
       if (!p) return;
       console.log(`CONNECT: Player ${p.iD} (${p.name}) joined as ${roleToEnum(p.role)} on ${teamToSide(p.team)}`);
+      if (p?.name && p?.iD) nameToId.set(p.name, p.iD);
       recorder.eventConnect({ id: p.iD, name: p.name, side: teamToSide(p.team), role: roleToEnum(p.role), team: p.platoon, loadout: p.loadout });
     });
 
@@ -179,14 +186,34 @@ async function seedInitialState(rec, roster) {
       if (id) {
         console.log(`DISCONNECT: Player ${id} left the server`);
         recorder.eventDisconnect({ id });
+        // cleanup name->id mappings
+        for (const [nm, pid] of Array.from(nameToId.entries())) {
+          if (pid === id) nameToId.delete(nm);
+        }
       }
     });
 
-    client.on('playerSwitchFaction', (evt) => {
-      const id = evt?.parsed?.playerId || evt?.player?.iD;
+    const resolveIdByName = async (name) => {
+      if (!name) return null;
+      let found = nameToId.get(name);
+      if (found) return found;
+      try {
+        const resp = await client.v2.players.fetch();
+        for (const p of resp?.players ?? []) {
+          if (p?.name && p?.iD) nameToId.set(p.name, p.iD);
+          if (p?.name === name) found = p.iD;
+        }
+      } catch {}
+      return found || null;
+    };
+
+    client.on('playerSwitchFaction', async (evt) => {
+      let id = evt?.parsed?.playerId || evt?.player?.iD;
+      const name = evt?.parsed?.player || evt?.parsed?.playerName || evt?.player?.name;
       const prev = sideFromFactionString(evt?.parsed?.oldFaction);
       const next = sideFromFactionString(evt?.parsed?.newFaction);
-      console.log(`FACTION SWITCH: Player ${id} ${prev} -> ${next}`);
+      if (!id && name) id = await resolveIdByName(name);
+      console.log(`FACTION SWITCH: Player ${name || id} ${prev} -> ${next}`);
       if (id && prev !== next) {
         if (!(prev === 'SIDE_UNKNOWN' && next === 'SIDE_UNKNOWN')) {
           recorder.eventFactionSwitch({ id, side: next });
