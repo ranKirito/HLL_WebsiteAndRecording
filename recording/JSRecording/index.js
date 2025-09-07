@@ -1,12 +1,14 @@
 import { IRCONClient } from 'hll-ircon';
 import { Recorder } from './recorder.js';
-import { TelemetryWriter } from './writer.js';
-
+import { writeRecordingToFile } from './writer.js';
+import { promises as fsp } from 'node:fs';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from "dotenv";
 dotenv.config();
+import readline from 'readline/promises';
+import { stdin as input, stdout as output } from 'process';
 
 const sideFromFactionString = (s) => {
   if (s === 'Allies') return 'ALLIES';
@@ -30,9 +32,53 @@ const __dirname = path.dirname(__filename);
 const OUT_DIR = path.resolve(__dirname, '../out');
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
+const CONFIG_PATH = path.resolve(__dirname, '../server-config.json');
+
+
+async function loadOrAskConfig() {
+  let saved = null;
+  try {
+    const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
+    saved = JSON.parse(raw);
+  } catch (_) {
+    // no saved config, continue
+  }
+
+  const rl = readline.createInterface({ input, output });
+  try {
+    if (saved && saved.host && saved.port && saved.password) {
+      const ans = (await rl.question(`Use saved server ("${saved.host}:${saved.port}")? [Y/n] `)).trim().toLowerCase();
+      if (ans === '' || ans === 'y' || ans === 'yes') {
+        await rl.close();
+        return saved;
+      }
+    } else {
+      console.log('No saved server info detected. Please enter your server info: ')
+    }
+
+
+    const host = (await rl.question(`Enter Host Ip (e.g. 127.0.0.1): `)).trim();
+    const portStr = (await rl.question(`Enter Port Number (e.g. 8080): `)).trim();
+    const password = (await rl.question(`Enter RCON password: `)).trim();
+
+    const cfg = { host, port: Number(portStr), password };
+
+    const saveAns = (await rl.question('Save these settings to server-config.json for next time? [y/N] ')).trim().toLowerCase();
+    if (saveAns === 'y' || saveAns === 'yes') {
+      fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2));
+      console.log('Saved to', CONFIG_PATH);
+    }
+
+    await rl.close();
+    return cfg;
+  } finally {
+    rl.close?.();
+  }
+}
+
 async function seedInitialState(rec, roster) {
   for (const p of roster) {
-    rec.eventConnect({ id: p.iD, side: teamToSide(p.team), role: roleToEnum(p.role), team: p.platoon, loadout: p.loadout });
+    rec.eventConnect({ id: p.iD, name: p.name, side: teamToSide(p.team), role: roleToEnum(p.role), team: p.platoon, loadout: p.loadout, initial: true });
     if (p.worldPosition) {
       rec.sampleMovement({
         id: p.iD,
@@ -44,176 +90,171 @@ async function seedInitialState(rec, roster) {
   rec.flush();
 }
 
-const client = new IRCONClient({
-  host: process.env.HOST,
-  port: process.env.PORT,
-  password: process.env.PASSWORD,
-});
+(async () => {
+  const { host, port, password } = await loadOrAskConfig();
 
-client.on('ready', async () => {
-  const serverNameRaw = await client.v2.server.getServerName();
-  const serverName = printableServerName(serverNameRaw);
-  console.log('Logged in to server:', serverName);
-
-  const sessionInfo = await client.v2.session.getSession();
-  console.log(`Session started: map=${sessionInfo?.session?.mapName}, players=${sessionInfo?.session?.playerCount ?? 0}`);
-
-  const outFile = path.join(
-    OUT_DIR,
-    `match_${new Date().toISOString().replace(/[:.]/g, '-')}.hll`
-  );
-
-  const writer = new TelemetryWriter({
-
-    schemaPath: path.resolve(__dirname, 'recording.proto'),
-    outFile,
+  const client = new IRCONClient({
+    host,
+    port,
+    password,
   });
-  console.log('Telemetry file will be written to:', outFile);
-  try {
-    await writer.init({
-      match_id: new Date().toISOString().replace(/[:.]/g, '-'),
-      map_name: sessionInfo?.session?.mapName ?? 'Unknown',
-      start_ms: Date.now(),
-      tick_hz: 2,
+
+  client.on('ready', async () => {
+    const serverNameRaw = await client.v2.server.getServerName();
+    const serverName = printableServerName(serverNameRaw);
+    console.log('Logged in to server:', serverName);
+    const startTime = Date.now();
+    const sessionInfo = await client.v2.session.getSession();
+    console.log(`Session started: map=${sessionInfo?.session?.mapName}, players=${sessionInfo?.session?.playerCount ?? 0}`);
+    console.log(`Important: ${sessionInfo.session.gameMode}`)
+    const outFile = path.join(
+      OUT_DIR,
+      `match_${new Date().toISOString().replace(/[:.]/g, '-')}.hll`
+    );
+
+    console.log('Telemetry file will be written on shutdown to:', outFile);
+
+    // --- initial players snapshot ---
+    const initialPlayersResp = await client.v2.players.fetch();
+    const playersPlaying = initialPlayersResp?.players ?? [];
+    let previousPlayersInfo = playersPlaying.slice();
+
+    const recorder = new Recorder({
+      serverName,
+      map: sessionInfo.session.mapName,
+      tickHz: 2,
     });
-  } catch (err) {
-    console.error('Failed to initialize TelemetryWriter:', err);
-    throw err;
-  }
 
-  // --- initial players snapshot ---
-  const initialPlayersResp = await client.v2.players.fetch();
-  const playersPlaying = initialPlayersResp?.players ?? [];
-  let previousPlayersInfo = playersPlaying.slice();
+    await seedInitialState(recorder, playersPlaying);
+    recorder.start();
 
-  const recorder = new Recorder({
-    serverName,
-    map: sessionInfo.session.mapName,
-    tickHz: 2,
-    onFlush: (chunk) => {
-      writer.writeChunk(chunk);
-    },
-  });
-
-  await seedInitialState(recorder, playersPlaying);
-  recorder.start();
-
-  const movementTimer = setInterval(async () => {
-    try {
-      const curResp = await client.v2.players.fetch();
-      const cur = curResp?.players ?? [];
-      const prevList = Array.isArray(previousPlayersInfo) ? previousPlayersInfo : [];
-      const prevById = new Map(prevList.map(pp => [pp.iD, pp]));
-      for (const p of cur) {
-        if (!p.worldPosition) continue;
-        recorder.sampleMovement({
-          id: p.iD,
-          x: p.worldPosition.x,
-          y: p.worldPosition.y,
-        });
-        const prev = prevById.get(p.iD);
-        if (prev) {
-          if (p.platoon !== prev.platoon) {
-            console.log(`TEAM SWITCH: Player ${p.iD} from team ${prev.platoon} -> ${p.platoon}`);
-            recorder.eventTeamSwitch({
-              id: p.iD,
-              previousTeam: prev.platoon,
-              team: p.platoon,
-            });
-          }
-          if (p.role !== prev.role) {
-            console.log(`ROLE SWITCH: Player ${p.iD} from ${roleToEnum(prev.role)} -> ${roleToEnum(p.role)}`);
-            recorder.eventRoleSwitch({
-              id: p.iD,
-              previousRole: roleToEnum(prev.role),
-              role: roleToEnum(p.role),
-            });
-          }
-          if (p.loadout !== prev.loadout) {
-            console.log(`LOADOUT SWITCH: Player ${p.iD} from ${prev.loadout} -> ${p.loadout}`);
-            recorder.eventLoadoutSwitch({
-              id: p.iD,
-              previousLoadout: prev.loadout,
-              loadout: p.loadout,
-            });
+    const movementTimer = setInterval(async () => {
+      try {
+        const curResp = await client.v2.players.fetch();
+        const cur = curResp?.players ?? [];
+        const prevList = Array.isArray(previousPlayersInfo) ? previousPlayersInfo : [];
+        const prevById = new Map(prevList.map(pp => [pp.iD, pp]));
+        for (const p of cur) {
+          if (!p.worldPosition) continue;
+          recorder.sampleMovement({
+            id: p.iD,
+            x: p.worldPosition.x,
+            y: p.worldPosition.y,
+          });
+          const prev = prevById.get(p.iD);
+          if (prev) {
+            if (p.platoon !== prev.platoon) {
+              console.log(`TEAM SWITCH: Player ${p.iD} from team ${prev.platoon} -> ${p.platoon}`);
+              recorder.eventTeamSwitch({ id: p.iD, team: p.platoon });
+            }
+            if (p.role !== prev.role) {
+              console.log(`ROLE SWITCH: Player ${p.iD} from ${roleToEnum(prev.role)} -> ${roleToEnum(p.role)}`);
+              recorder.eventRoleSwitch({ id: p.iD, role: roleToEnum(p.role) });
+            }
+            if (p.loadout !== prev.loadout) {
+              console.log(`LOADOUT SWITCH: Player ${p.iD} from ${prev.loadout} -> ${p.loadout}`);
+              recorder.eventLoadoutSwitch({ id: p.iD, loadout: p.loadout });
+            }
           }
         }
+
+        previousPlayersInfo = cur;
+      } catch (e) {
+        console.error('movement poll failed:', e);
       }
+    }, 1000);
 
-      previousPlayersInfo = cur;
-    } catch (e) {
-      console.error('movement poll failed:', e);
-    }
-  }, 1000);
+    client.on('playerConnected', async (evt) => {
+      const p = evt?.player || (await client.v2.players.get?.(evt?.parsed?.playerId));
+      if (!p) return;
+      console.log(`CONNECT: Player ${p.iD} (${p.name}) joined as ${roleToEnum(p.role)} on ${teamToSide(p.team)}`);
+      recorder.eventConnect({ id: p.iD, name: p.name, side: teamToSide(p.team), role: roleToEnum(p.role), team: p.platoon, loadout: p.loadout });
+    });
 
-  client.on('playerConnected', async (evt) => {
-    const p = evt?.player || (await client.v2.players.get?.(evt?.parsed?.playerId));
-    if (!p) return;
-    console.log(`CONNECT: Player ${p.iD} joined as ${roleToEnum(p.role)} on ${teamToSide(p.team)}`);
-    recorder.eventConnect({ id: p.iD, side: teamToSide(p.team), role: roleToEnum(p.role), team: p.platoon, loadout: p.loadout });
-  });
-
-  client.on('playerDisconnected', (evt) => {
-    const id = evt?.parsed?.playerId || evt?.player?.iD;
-    if (id) {
-      console.log(`DISCONNECT: Player ${id} left the server`);
-      recorder.eventDisconnect({ id });
-    }
-  });
-
-  client.on('playerSwitchFaction', (evt) => {
-    const id = evt?.parsed?.playerId || evt?.player?.iD;
-    const prev = sideFromFactionString(evt?.parsed?.oldFaction);
-    const next = sideFromFactionString(evt?.parsed?.newFaction);
-    console.log(`FACTION SWITCH: Player ${id} ${prev} -> ${next}`);
-    if (id && prev !== next) {
-      if (!(prev === 'SIDE_UNKNOWN' && next === 'SIDE_UNKNOWN')) {
-        recorder.eventFactionSwitch({ id, previousSide: prev, side: next });
+    client.on('playerDisconnected', (evt) => {
+      const id = evt?.parsed?.playerId || evt?.player?.iD;
+      if (id) {
+        console.log(`DISCONNECT: Player ${id} left the server`);
+        recorder.eventDisconnect({ id });
       }
-    }
-  });
+    });
+
+    client.on('playerSwitchFaction', (evt) => {
+      const id = evt?.parsed?.playerId || evt?.player?.iD;
+      const prev = sideFromFactionString(evt?.parsed?.oldFaction);
+      const next = sideFromFactionString(evt?.parsed?.newFaction);
+      console.log(`FACTION SWITCH: Player ${id} ${prev} -> ${next}`);
+      if (id && prev !== next) {
+        if (!(prev === 'SIDE_UNKNOWN' && next === 'SIDE_UNKNOWN')) {
+          recorder.eventFactionSwitch({ id, side: next });
+        }
+      }
+    });
 
 
-  client.on('playerKilled', (evt) => {
-    const killerId = evt?.parsed?.killerId;
-    const victimId = evt?.parsed?.victimId;
-    const weapon = evt?.parsed?.weapon;
-    console.log(`KILL: Killer=${killerId}, Victim=${victimId}, Weapon=${weapon}`);
-    if (killerId && victimId) {
-      recorder.eventKill({ killerId, victimId, weapon });
-    }
-  });
+    client.on('playerKilled', (evt) => {
+      const killerId = evt?.parsed?.killerId;
+      const victimId = evt?.parsed?.victimId;
+      const weapon = evt?.parsed?.weapon;
+      console.log(`KILL: Killer=${killerId}, Victim=${victimId}, Weapon=${weapon}`);
+      if (killerId && victimId) {
+        recorder.eventKill({ killerId, victimId, weapon });
+      }
+    });
 
-  client.on('playerTeamKilled', (evt) => {
-    const killerId = evt?.parsed?.killerId;
-    const victimId = evt?.parsed?.victimId;
-    const weapon = evt?.parsed?.weapon;
-    console.log(`TEAM KILL: Killer=${killerId}, Victim=${victimId}, Weapon=${weapon}`);
-    if (killerId && victimId) {
-      recorder.eventKill({ killerId, victimId, weapon });
-    }
-  });
+    client.on('playerTeamKilled', (evt) => {
+      const killerId = evt?.parsed?.killerId;
+      const victimId = evt?.parsed?.victimId;
+      const weapon = evt?.parsed?.weapon;
+      console.log(`TEAM KILL: Killer=${killerId}, Victim=${victimId}, Weapon=${weapon}`);
+      if (killerId && victimId) {
+        recorder.eventKill({ killerId, victimId, weapon });
+      }
+    });
 
-  // --- graceful shutdown ---
-  const shutdown = async () => {
-    console.log('Shuting down...')
-    clearInterval(movementTimer);
-    await recorder.stop();
-    writer.close();
-    // try to close sockets gracefully
-    client.v2?.socket?.end?.();
-    client.v2?.socket?.destroy?.();
-    client.v1?.socket?.end?.();
-    client.v1?.socket?.destroy?.();
-    process.exit(0);
-  };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+    // --- graceful shutdown ---
+    const shutdown = async () => {
+      console.log('Shuting down...')
+      clearInterval(movementTimer);
+      await recorder.stop();
+      try {
+        const header = recorder.buildHeader({
+          matchId: new Date().toISOString().replace(/[:.]/g, '-'),
+          mapName: sessionInfo?.session?.mapName ?? 'Unknown',
+          startMs: startTime,
+          tickHz: 2,
+        });
+        await writeRecordingToFile({
+          schemaPath: path.resolve(__dirname, 'recording.proto'),
+          outFile,
+          header,
+          chunks: recorder.getChunks(),
+        });
+      } catch (err) {
+        console.error('Failed to write telemetry file:', err);
+      }
+      //store logs
+      const elapsedMs = Date.now() - startTime;
+      const logs = await client.v2.logs.fetch(elapsedMs);
+      await fsp.writeFile('logs.txt', logs)
+      // try to close sockets gracefully
+      client.v2?.socket?.end?.();
+      client.v2?.socket?.destroy?.();
+      client.v1?.socket?.end?.();
+      client.v1?.socket?.destroy?.();
+      process.exit(0);
+    };
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
+    client.on?.('MATCH ENDED', shutdown);
+    client.on?.('matchEnded', shutdown);
+    client.on?.('match_end', shutdown);
 
-  process.on('unhandledRejection', (reason) => {
-    console.error('Unhandled promise rejection:', reason);
+    process.on('unhandledRejection', (reason) => {
+      console.error('Unhandled promise rejection:', reason);
+    });
+    process.on('uncaughtException', (err) => {
+      console.error('Uncaught exception:', err);
+    });
   });
-  process.on('uncaughtException', (err) => {
-    console.error('Uncaught exception:', err);
-  });
-});
+})();

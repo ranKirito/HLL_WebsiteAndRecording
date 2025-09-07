@@ -102,38 +102,92 @@ export class TelemetryReader {
 }
 
 export async function exportDecodedToFiles({ header, chunks, flat }, { outJson, posCsv, eventsCsv }) {
+  // Prepare convenience lookups
+  const playerDict = header?.playerDict || header?.player_dict || {};
+  const teamDict = header?.teamDict || header?.team_dict || {};
+  const weaponDict = header?.weaponDict || header?.weapon_dict || {};
+  const loadoutDict = header?.loadoutDict || header?.loadout_dict || {};
+
+  const splitPair = (val) => {
+    const s = String(val ?? '');
+    const i = s.indexOf('|');
+    if (i === -1) return { id: s, name: '' };
+    return { id: s.slice(0, i), name: s.slice(i + 1) };
+  };
+  const idFromIdx = (idx) => splitPair(playerDict?.[String(idx)]).id;
+  const nameFromIdx = (idx) => splitPair(playerDict?.[String(idx)]).name;
+
   if (outJson) {
     const payload = { header, chunks };
     await writeFileIf(outJson, JSON.stringify(payload, null, 2));
   }
+
   if (posCsv) {
-    const headers = ['tMs', 'playerId', 'xQ', 'yQ'];
-    const rows = (flat?.pos || []).map(p => ({
-      tMs: p.tMs ?? p.t_ms ?? '',
-      playerId: p.playerId ?? p.player_id ?? '',
-      xQ: p.xQ ?? p.x_q ?? '',
-      yQ: p.yQ ?? p.y_q ?? '',
-    }));
+    const headers = ['tMs', 'playerIdx', 'playerId', 'playerName', 'xQ', 'yQ'];
+    const rows = (flat?.pos || []).map(p => {
+      const idx = p.playerIdx ?? p.player_idx ?? null;
+      return {
+        tMs: p.tMs ?? p.t_ms ?? '',
+        playerIdx: idx ?? '',
+        playerId: idx != null ? idFromIdx(idx) : (p.playerId ?? p.player_id ?? ''),
+        playerName: idx != null ? nameFromIdx(idx) : '',
+        xQ: p.xQ ?? p.x_q ?? '',
+        yQ: p.yQ ?? p.y_q ?? '',
+      };
+    });
     await writeFileIf(posCsv, toCSV(rows, headers));
   }
-  // Events CSV
+
   if (eventsCsv) {
-    const headers = ['tMs', 'playerId', 'type', 'previousSide', 'side', 'previousRole', 'role', 'previousTeam', 'team', 'previousLoadout', 'loadout', 'targetId', 'weapon'];
-    const rows = (flat?.events || []).map(e => ({
-      tMs: e.tMs ?? e.t_ms ?? '',
-      playerId: e.playerId ?? e.player_id ?? '',
-      type: e.type ?? '',
-      previousSide: e.previousSide ?? '',
-      side: e.side ?? '',
-      previousRole: e.previousRole ?? '',
-      role: e.role ?? '',
-      previousTeam: e.previousTeam ?? '',
-      team: e.team ?? '',
-      previousLoadout: e.previousLoadout ?? '',
-      loadout: e.loadout ?? '',
-      targetId: e.targetId ?? e.target_id ?? '',
-      weapon: e.weapon ?? '',
-    }));
+    const headers = [
+      'tMs', 'type', 'playerIdx', 'playerId', 'playerName',
+      'targetIdx', 'targetId', 'targetName', 'weaponIdx', 'weapon',
+      'toTeamIdx', 'toTeam', 'toRole', 'toSide', 'toLoadoutIdx', 'toLoadout'
+    ];
+
+    const rows = (flat?.events || []).map(e => {
+      const idx = e.playerIdx ?? e.player_idx ?? null;
+      const type = e.connect ? 'CONNECT'
+        : e.disconnect ? 'DISCONNECT'
+        : e.kill ? 'KILL'
+        : e.teamSwitch ? 'TEAM_SWITCH'
+        : e.roleSwitch ? 'ROLE_SWITCH'
+        : e.factionSwitch ? 'FACTION_SWITCH'
+        : e.loadoutSwitch ? 'LOADOUT_SWITCH'
+        : '';
+
+      const kill = e.kill || {};
+      const teamSwitch = e.teamSwitch || {};
+      const roleSwitch = e.roleSwitch || {};
+      const factionSwitch = e.factionSwitch || {};
+      const loadoutSwitch = e.loadoutSwitch || {};
+
+      const targetIdx = kill.targetIdx ?? kill.target_idx;
+      const weaponIdx = kill.weaponIdx ?? kill.weapon_idx;
+      const toTeamIdx = teamSwitch.toTeamIdx ?? teamSwitch.to_team_idx;
+      const toRole = roleSwitch.toRole ?? roleSwitch.to_role;
+      const toSide = factionSwitch.toSide ?? factionSwitch.to_side;
+      const toLoadoutIdx = loadoutSwitch.toLoadoutIdx ?? loadoutSwitch.to_loadout_idx;
+
+      return {
+        tMs: e.tMs ?? e.t_ms ?? '',
+        type,
+        playerIdx: idx ?? '',
+        playerId: idx != null ? idFromIdx(idx) : (e.playerId ?? e.player_id ?? ''),
+        playerName: idx != null ? nameFromIdx(idx) : '',
+        targetIdx: targetIdx ?? '',
+        targetId: targetIdx != null ? idFromIdx(targetIdx) : '',
+        targetName: targetIdx != null ? nameFromIdx(targetIdx) : '',
+        weaponIdx: weaponIdx ?? '',
+        weapon: weaponIdx != null ? (weaponDict?.[String(weaponIdx)] ?? '') : '',
+        toTeamIdx: toTeamIdx ?? '',
+        toTeam: toTeamIdx != null ? (teamDict?.[String(toTeamIdx)] ?? '') : '',
+        toRole: toRole ?? '',
+        toSide: toSide ?? '',
+        toLoadoutIdx: toLoadoutIdx ?? '',
+        toLoadout: toLoadoutIdx != null ? (loadoutDict?.[String(toLoadoutIdx)] ?? '') : '',
+      };
+    });
     await writeFileIf(eventsCsv, toCSV(rows, headers));
   }
 }
