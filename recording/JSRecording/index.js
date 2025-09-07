@@ -115,6 +115,12 @@ async function seedInitialState(rec, roster) {
     let previousPlayersInfo = [];
     let recorder = new Recorder({ serverName, map: sessionInfo.session.mapName, tickHz: 2 });
 
+    const logsFileFor = (outfilePath) => {
+      if (!outfilePath) return path.join(OUT_DIR, `match_${new Date().toISOString().replace(/[:.]/g, '-')}.logs.txt`);
+      if (outfilePath.endsWith('.hll')) return outfilePath.replace(/\.hll$/, '.logs.txt');
+      return `${outfilePath}.logs.txt`;
+    };
+
     async function startRecordingForCurrentSession() {
       const initialPlayersResp = await client.v2.players.fetch();
       const playersPlaying = initialPlayersResp?.players ?? [];
@@ -232,9 +238,17 @@ async function seedInitialState(rec, roster) {
 
     const finalizeAndRestart = async () => {
       console.log('Match ended. Finalizing and restarting recorder...');
-      clearInterval(movementTimer);
       await recorder.stop();
       await finalizeToDisk();
+      // write per-match logs file
+      try {
+        const elapsedMs = Date.now() - startTime;
+        const logs = await client.v2.logs.fetch(elapsedMs);
+        await fsp.writeFile(logsFileFor(outFile), logs);
+        console.log('Wrote logs:', logsFileFor(outFile));
+      } catch (e) {
+        console.warn('Failed to write match logs:', e);
+      }
       // Refresh session, rotate file, reset state
       startTime = Date.now();
       sessionInfo = await client.v2.session.getSession();
@@ -249,10 +263,15 @@ async function seedInitialState(rec, roster) {
       clearInterval(movementTimer);
       await recorder.stop();
       await finalizeToDisk();
-      //store logs
-      const elapsedMs = Date.now() - startTime;
-      const logs = await client.v2.logs.fetch(elapsedMs);
-      await fsp.writeFile('logs.txt', logs)
+      // store per-match logs next to recording
+      try {
+        const elapsedMs = Date.now() - startTime;
+        const logs = await client.v2.logs.fetch(elapsedMs);
+        await fsp.writeFile(logsFileFor(outFile), logs);
+        console.log('Wrote logs:', logsFileFor(outFile));
+      } catch (e) {
+        console.warn('Failed to write match logs:', e);
+      }
       // try to close sockets gracefully
       client.v2?.socket?.end?.();
       client.v2?.socket?.destroy?.();
