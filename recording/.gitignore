@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local config
+server-config.json
+.env
+.env.*
+
+# Build/output
+out/
+dist/
+coverage/
+
+# Generated data
+*.hll
+*.csv
+decoded.json
+*.map
+
+# TypeScript
+*.tsbuildinfo
+
